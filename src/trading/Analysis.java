@@ -2,6 +2,7 @@ package trading;
 
 import java.io.File;
 import java.io.FileReader;
+import java.io.FileWriter;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Paths;
@@ -11,6 +12,7 @@ import java.util.List;
 import java.util.Map;
 
 import com.opencsv.CSVReader;
+import com.opencsv.CSVWriter;
 
 /**
  * Overall goals::
@@ -31,66 +33,94 @@ import com.opencsv.CSVReader;
  *
  */
 public class Analysis {
-	private static final double LIMIT = 1000000;
-	private static final int LOOKAHEAD_PERIOD = 5; // num trading days.
+	// how much daily trading volume should a stock have in $.
+	private static final double TRADING_LIMIT = 1000000;
+	// num trading days.
+	private static final int LOOKAHEAD_PERIOD = 5;
+	// how much change do we want.
+	private static final double PERCENTAGE_DEVIATION_LIMIT = 1.05;
 
 	public static void main(String[] args) throws IOException {
 		System.out.println("Analysis Start");
-		Map<String, List<Double>> codeToTotalsMap = readAllFiles();
-		System.out.println("Total codes: " + codeToTotalsMap.size());
-		Map<String, Double> filteredCodes = filterStocksWithoutEnoughTradingVolume(codeToTotalsMap);
-		System.out.println("Total codes after filtering:" + filteredCodes.size());
+		Map<String, Security> securities = readAllFiles();
+		System.out.println("Total codes: " + securities.size());
+		List<Security> filteredSecurities = getStocksWithMinimumTradingVolume(securities, TRADING_LIMIT);
+		System.out.println("Total codes after filtering:" + filteredSecurities.size());
+		filteredSecurities.forEach(sec -> sec.process(LOOKAHEAD_PERIOD, PERCENTAGE_DEVIATION_LIMIT));
+		outputResultsToCsv(filteredSecurities);
 		System.out.println("Analysis Complete!");
 	}
 
-	private static Map<String, Double> filterStocksWithoutEnoughTradingVolume(
-			Map<String, List<Double>> codeToTotalsMap) {
-		Map<String, Double> codeToAverageMap = new HashMap<String, Double>();
-		codeToTotalsMap.forEach((code, list) -> {
-			Double average = list.stream().mapToDouble(i -> i).average().getAsDouble();
-			if (average > LIMIT) {
-				codeToAverageMap.put(code, average);
-			}
+	private static void outputResultsToCsv(List<Security> securities) throws IOException {
+		File results = new File("results.csv");
+		CSVWriter writer = new CSVWriter(new FileWriter(results));
+		String[] headers = new String[] {
+				"Code",
+				"Num days with positive deviation",
+				"Num days with negative deviation",
+				"Num days with both",
+				"Longest Streak",
+				"Streak start",
+				"Average Trading $" };
+
+		writer.writeNext(headers);
+		securities.forEach(sec -> {
+			writer.writeNext(new String[] {
+					sec.getCode(),
+					Integer.toString(sec.getPositiveCount()),
+					Integer.toString(sec.getNegativeCount()),
+					Integer.toString(sec.getBothCount()),
+					Integer.toString(sec.getStreakLength()),
+					sec.getStreakStart(),
+					Double.toString(sec.getAverageTradingVolume()) });
 		});
-		return codeToAverageMap;
+		writer.close();
 	}
 
-	private static Map<String, List<Double>> readAllFiles() throws IOException {
-		Map<String, List<Double>> codeToAverageMap = new HashMap<>();
+	private static List<Security> getStocksWithMinimumTradingVolume(Map<String, Security> securities, double minimum) {
+		List<Security> secs = new LinkedList<Security>();
+		securities.forEach((String code, Security sec) -> {
+			if (sec.getAverageTradingVolume() > minimum) {
+				secs.add(sec);
+			}
+		});
+		return secs;
+	}
+
+	private static Map<String, Security> readAllFiles() throws IOException {
+		Map<String, Security> codeToSecuritiesMap = new HashMap<>();
 		Files.walk(Paths.get("src/resources/data")).filter(Files::isRegularFile).forEach(path -> {
 			try {
-				Analysis.readAllSecurityFile(path.toFile(), codeToAverageMap);
+				Analysis.readFileWithDataForOneDay(path.toFile(), codeToSecuritiesMap);
 			} catch (Exception e) {
 				e.printStackTrace();
 			}
 		});
-		return codeToAverageMap;
+		return codeToSecuritiesMap;
 	}
 
 	/**
-	 * Populates the averages map with code and $ data.
+	 * Reads all the security data into memory
 	 * 
 	 * @param f
 	 *            - csv file with format (code, date, open, high, low, close,
 	 *            volume)
-	 * @param averages
-	 *            - Map<code, [$ in day]
+	 * @param securities
+	 *            - Map<code, security>
 	 * @throws IOException
 	 */
-	public static void readAllSecurityFile(File f, Map<String, List<Double>> averages) throws IOException {
+	public static void readFileWithDataForOneDay(File f, Map<String, Security> securities) throws IOException {
 		CSVReader reader = new CSVReader(new FileReader(f));
 		List<String[]> rows = reader.readAll();
 		reader.close();
 		rows.forEach(row -> {
-			SecurityForDay sec = new SecurityForDay(row);
-			List<Double> list = averages.get(sec.getCode());
-			if (list == null) {
-				List<Double> newList = new LinkedList<Double>();
-				newList.add(sec.getTotalTradingValue());
-				averages.put(sec.getCode(), newList);
-			} else {
-				list.add(sec.getTotalTradingValue());
+			SecurityForDay secForDay = new SecurityForDay(row);
+			Security sec = securities.get(secForDay.getCode());
+			if (sec == null) {
+				sec = new Security(secForDay.getCode());
 			}
+			sec.addDataForNextDay(secForDay);
+			securities.put(sec.getCode(), sec);
 		});
 	}
 }

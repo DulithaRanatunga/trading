@@ -15,69 +15,41 @@ public class SecurityForDay {
 			System.err.println("Invalid Data");
 			System.exit(-1);
 		}
-		this.setCode(row[0]);
-		this.setDate(row[1]);
-		this.setOpen(Double.valueOf(row[2]));
-		this.setHigh(Double.valueOf(row[3]));
-		this.setLow(Double.valueOf(row[4]));
-		this.setClose(Double.valueOf(row[5]));
-		this.setVolume(Integer.valueOf(row[6]));
+		this.code = row[0];
+		this.date = row[1];
+		this.open = Double.valueOf(row[2]);
+		this.high = Double.valueOf(row[3]);
+		this.low = Double.valueOf(row[4]);
+		this.close = Double.valueOf(row[5]);
+		this.volume = Integer.valueOf(row[6]);
 	}
 
 	public String getCode() {
 		return code;
 	}
 
-	public void setCode(String code) {
-		this.code = code;
-	}
-
 	public String getDate() {
 		return date;
-	}
-
-	public void setDate(String date) {
-		this.date = date;
 	}
 
 	public double getOpen() {
 		return open;
 	}
 
-	public void setOpen(double open) {
-		this.open = open;
-	}
-
 	public double getHigh() {
 		return high;
-	}
-
-	public void setHigh(double high) {
-		this.high = high;
 	}
 
 	public double getLow() {
 		return low;
 	}
 
-	public void setLow(double low) {
-		this.low = low;
-	}
-
 	public double getClose() {
 		return close;
 	}
 
-	public void setClose(double close) {
-		this.close = close;
-	}
-
 	public int getVolume() {
 		return volume;
-	}
-
-	public void setVolume(int volume) {
-		this.volume = volume;
 	}
 
 	public Double getTotalTradingValue() {
