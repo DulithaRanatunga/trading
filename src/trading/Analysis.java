@@ -38,7 +38,7 @@ public class Analysis {
 	// num trading days.
 	private static final int LOOKAHEAD_PERIOD = 5;
 	// how much change do we want.
-	private static final double PERCENTAGE_DEVIATION_LIMIT = 1.05;
+	private static final double[] DEVIATIONS = { 1.01, 1.03, 1.05, 1.1 };
 
 	public static void main(String[] args) throws IOException {
 		System.out.println("Analysis Start");
@@ -46,13 +46,16 @@ public class Analysis {
 		System.out.println("Total codes: " + securities.size());
 		List<Security> filteredSecurities = getStocksWithMinimumTradingVolume(securities, TRADING_LIMIT);
 		System.out.println("Total codes after filtering:" + filteredSecurities.size());
-		filteredSecurities.forEach(sec -> sec.process(LOOKAHEAD_PERIOD, PERCENTAGE_DEVIATION_LIMIT));
-		outputResultsToCsv(filteredSecurities);
+		for (double percentage : DEVIATIONS) {
+			filteredSecurities.forEach(sec -> sec.process(LOOKAHEAD_PERIOD, percentage, SecurityForDay::getAverage));
+			filteredSecurities.sort((a, b) -> Integer.valueOf(b.getPositiveCount()).compareTo(a.getPositiveCount()));
+			outputResultsToCsv(filteredSecurities, percentage);
+		}
 		System.out.println("Analysis Complete!");
 	}
 
-	private static void outputResultsToCsv(List<Security> securities) throws IOException {
-		File results = new File("results.csv");
+	private static void outputResultsToCsv(List<Security> securities, double percentage) throws IOException {
+		File results = new File("results_" + LOOKAHEAD_PERIOD + "_" + percentage + ".csv");
 		CSVWriter writer = new CSVWriter(new FileWriter(results));
 		String[] headers = new String[] {
 				"Code",
@@ -61,7 +64,9 @@ public class Analysis {
 				"Num days with both",
 				"Longest Streak",
 				"Streak start",
-				"Average Trading $" };
+				"Average Trading $",
+				"Worst loss",
+				"Best gain" };
 
 		writer.writeNext(headers);
 		securities.forEach(sec -> {
@@ -72,7 +77,9 @@ public class Analysis {
 					Integer.toString(sec.getBothCount()),
 					Integer.toString(sec.getStreakLength()),
 					sec.getStreakStart(),
-					Double.toString(sec.getAverageTradingVolume()) });
+					Double.toString(sec.getAverageTradingVolume()),
+					sec.getWorst() + "%",
+					sec.getBest() + "%" });
 		});
 		writer.close();
 	}

@@ -2,6 +2,7 @@ package trading;
 
 import java.util.LinkedList;
 import java.util.List;
+import java.util.function.Function;
 
 public class Security {
 	private String code;
@@ -12,6 +13,8 @@ public class Security {
 	private int bothCount;
 	private int streaklength;
 	private String streakstart;
+	private Double worst = 0.0;
+	private Double best = 0.0;
 
 	public Security(String code) {
 		this.code = code;
@@ -43,7 +46,7 @@ public class Security {
 		return this.averageTradingVolume;
 	}
 
-	public void process(int lookahead, double percentage) {
+	public void process(int lookahead, double percentage, Function<SecurityForDay, Double> metric) {
 		this.positiveCount = 0;
 		this.negativeCount = 0;
 		this.bothCount = 0;
@@ -54,8 +57,10 @@ public class Security {
 		List<SecurityForDay> sublist;
 		for (int i = 0; i < days.size() - lookahead; i++) {
 			sublist = days.subList(i, i + lookahead);
-			boolean posFound = this.positiveFound(sublist, percentage);
-			boolean negFound = this.negativeFound(sublist, percentage);
+			boolean posFound = this.positiveFound(sublist, percentage, metric);
+			boolean negFound = this.negativeFound(sublist, percentage, metric);
+			checkBest(sublist, metric);
+			checkWorst(sublist, metric);
 			if (posFound) {
 				this.positiveCount++;
 				if (restartStreak) {
@@ -79,31 +84,35 @@ public class Security {
 				this.bothCount++;
 			}
 		}
-		if (currentStreak > this.streaklength) {
+		if (currentStreak >= this.streaklength) {
 			this.streaklength = currentStreak;
 			this.streakstart = currentStreakStart;
 		}
 	}
 
-	private boolean negativeFound(List<SecurityForDay> sublist, double percentage) {
+	private void checkWorst(List<SecurityForDay> sublist, Function<SecurityForDay, Double> metric) {
 		double start = sublist.get(0).getOpen();
-		for (SecurityForDay day : sublist) {
-			// 100 - 10% = 90 = 100 - 100/100*10
-			if (day.getClose() < (start - (start / (100 * (percentage - 1))))) {
-				return true;
-			}
-		}
-		return false;
+		double min = sublist.stream().mapToDouble(d -> metric.apply(d)).min().orElse(start);
+		double loss = (start - min) / start;
+		this.worst = Math.max(this.worst, loss);
 	}
 
-	private boolean positiveFound(List<SecurityForDay> sublist, double percentage) {
+	private void checkBest(List<SecurityForDay> sublist, Function<SecurityForDay, Double> metric) {
 		double start = sublist.get(0).getOpen();
-		for (SecurityForDay day : sublist) {
-			if (day.getHigh() / start > percentage) {
-				return true;
-			}
-		}
-		return false;
+		double max = sublist.stream().mapToDouble(d -> metric.apply(d)).max().orElse(0);
+		this.best = Math.max(this.best, max / start);
+	}
+
+	private boolean negativeFound(List<SecurityForDay> sublist, double percentage,
+			Function<SecurityForDay, Double> metric) {
+		double target = sublist.get(0).getOpen() / percentage;
+		return sublist.stream().map(d -> metric.apply(d) <= target).findFirst().orElse(false);
+	}
+
+	private boolean positiveFound(List<SecurityForDay> sublist, double percentage,
+			Function<SecurityForDay, Double> metric) {
+		double target = sublist.get(0).getOpen() * percentage;
+		return sublist.stream().map(d -> metric.apply(d) >= target).findFirst().orElse(false);
 	}
 
 	public int getPositiveCount() {
@@ -124,6 +133,14 @@ public class Security {
 
 	public String getStreakStart() {
 		return this.streakstart;
+	}
+
+	public Double getWorst() {
+		return worst * -100;
+	}
+
+	public Double getBest() {
+		return best * 100;
 	}
 
 }

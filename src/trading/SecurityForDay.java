@@ -44,6 +44,10 @@ public class SecurityForDay {
 		return low;
 	}
 
+	public double getAverage() {
+		return (this.close + this.open) / 2.0;
+	}
+
 	public double getClose() {
 		return close;
 	}
